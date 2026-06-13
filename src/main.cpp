@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <iostream>
+#include <vector>
 
 #include <SDL3/SDL.h>
 #include <webgpu/webgpu_cpp.h>
@@ -45,60 +46,79 @@ static wgpu::Surface createSurface(
 }
 
 int main(int argc, char* argv[]) {
-    static constexpr auto kTimedWaitAny =
-        wgpu::InstanceFeatureName::TimedWaitAny;
-    wgpu::InstanceDescriptor instanceDescriptor{
-        .requiredFeatureCount = 1, .requiredFeatures = &kTimedWaitAny
-    };
-    wgpu::Instance instance = wgpu::CreateInstance(&instanceDescriptor);
-    if (!instance) {
-        std::cerr << "Instance creation failed!\n";
-        return EXIT_FAILURE;
-    }
+    auto instance = []() {
+        const std::vector<wgpu::InstanceFeatureName> required_features{
+            wgpu::InstanceFeatureName::TimedWaitAny,
+        };
 
-    wgpu::RequestAdapterOptions adapterOptions{};
-    wgpu::Adapter adapter;
-    instance.WaitAny(
-        instance.RequestAdapter(
-            &adapterOptions,
-            wgpu::CallbackMode::WaitAnyOnly,
-            [&adapter](
-                wgpu::RequestAdapterStatus status,
-                wgpu::Adapter a,
-                wgpu::StringView msg
-            ) {
-                if (status == wgpu::RequestAdapterStatus::Success)
-                    adapter = a;
-                else
-                    std::cerr << "RequestAdapter failed: " << msg.data << "\n";
-            }
-        ),
-        UINT64_MAX
-    );
-    if (!adapter)
-        return EXIT_FAILURE;
+        const wgpu::InstanceDescriptor instanceDescriptor{
+            .requiredFeatureCount = required_features.size(),
+            .requiredFeatures = required_features.data()
+        };
 
-    wgpu::Device device;
-    wgpu::DeviceDescriptor deviceDesc{};
-    instance.WaitAny(
-        adapter.RequestDevice(
-            &deviceDesc,
-            wgpu::CallbackMode::WaitAnyOnly,
-            [&device](
-                wgpu::RequestDeviceStatus status,
-                wgpu::Device d,
-                wgpu::StringView msg
-            ) {
-                if (status == wgpu::RequestDeviceStatus::Success)
-                    device = d;
-                else
-                    std::cerr << "RequestDevice failed: " << msg.data << "\n";
-            }
-        ),
-        UINT64_MAX
-    );
-    if (!device)
-        return EXIT_FAILURE;
+        auto instance = wgpu::CreateInstance(&instanceDescriptor);
+        if (!instance) {
+            throw std::runtime_error("Failed to create WebGPU instance!");
+        }
+        return instance;
+    }();
+
+    auto adapter = [&instance]() {
+        wgpu::RequestAdapterOptions adapterOptions{};
+        wgpu::Adapter adapter;
+        instance.WaitAny(
+            instance.RequestAdapter(
+                &adapterOptions,
+                wgpu::CallbackMode::WaitAnyOnly,
+                [&adapter](
+                    wgpu::RequestAdapterStatus status,
+                    wgpu::Adapter a,
+                    wgpu::StringView msg
+                ) {
+                    if (status == wgpu::RequestAdapterStatus::Success)
+                        adapter = a;
+                    else
+                        throw std::runtime_error(
+                            "RequestAdapter failed: " +
+                            std::string(msg.data, msg.length)
+                        );
+                }
+            ),
+            UINT64_MAX
+        );
+        if (!adapter)
+            throw std::runtime_error("Failed to get WebGPU adapter!");
+        return adapter;
+    }();
+
+    auto device = [&adapter, &instance]() {
+        wgpu::Device device;
+        wgpu::DeviceDescriptor deviceDesc{};
+        instance.WaitAny(
+            adapter.RequestDevice(
+                &deviceDesc,
+                wgpu::CallbackMode::WaitAnyOnly,
+                [&device](
+                    wgpu::RequestDeviceStatus status,
+                    wgpu::Device d,
+                    wgpu::StringView msg
+                ) {
+                    if (status == wgpu::RequestDeviceStatus::Success)
+                        device = d;
+                    else
+                        throw std::runtime_error(
+                            "RequestDevice failed: " +
+                            std::string(msg.data, msg.length)
+                        );
+                }
+            ),
+            UINT64_MAX
+        );
+        if (!device)
+            throw std::runtime_error("Failed to get WebGPU device!");
+
+        return device;
+    }();
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         std::cerr << "SDL_Init failed: " << SDL_GetError() << "\n";
