@@ -2,14 +2,13 @@
 #include <iostream>
 #include <vector>
 
-#include <webgpu/webgpu_cpp.h>
-
 #if defined(__APPLE__)
     #include <SDL3/SDL_metal.h>
 #elif defined(_WIN32)
     #include <windows.h>
 #endif
 
+#include "device.hpp"
 #include "sdl_window.hpp"
 
 
@@ -53,91 +52,15 @@ namespace {
 
 
 int main(int argc, char* argv[]) {
-    auto instance = []() {
-        const std::vector<wgpu::InstanceFeatureName> required_features{
-            wgpu::InstanceFeatureName::TimedWaitAny,
-        };
-
-        const wgpu::InstanceDescriptor instanceDescriptor{
-            .requiredFeatureCount = required_features.size(),
-            .requiredFeatures = required_features.data()
-        };
-
-        auto instance = wgpu::CreateInstance(&instanceDescriptor);
-        if (!instance) {
-            throw std::runtime_error("Failed to create WebGPU instance!");
-        }
-        return instance;
-    }();
-
-    auto adapter = [&instance]() {
-        wgpu::RequestAdapterOptions adapterOptions{};
-        wgpu::Adapter adapter;
-        instance.WaitAny(
-            instance.RequestAdapter(
-                &adapterOptions,
-                wgpu::CallbackMode::WaitAnyOnly,
-                [&adapter](
-                    wgpu::RequestAdapterStatus status,
-                    wgpu::Adapter a,
-                    wgpu::StringView msg
-                ) {
-                    if (status == wgpu::RequestAdapterStatus::Success)
-                        adapter = a;
-                    else
-                        throw std::runtime_error(
-                            "RequestAdapter failed: " +
-                            std::string(msg.data, msg.length)
-                        );
-                }
-            ),
-            UINT64_MAX
-        );
-        if (!adapter)
-            throw std::runtime_error("Failed to get WebGPU adapter!");
-        return adapter;
-    }();
-
-    auto device = [&adapter, &instance]() {
-        wgpu::Device device;
-        wgpu::DeviceDescriptor deviceDesc{};
-        instance.WaitAny(
-            adapter.RequestDevice(
-                &deviceDesc,
-                wgpu::CallbackMode::WaitAnyOnly,
-                [&device](
-                    wgpu::RequestDeviceStatus status,
-                    wgpu::Device d,
-                    wgpu::StringView msg
-                ) {
-                    if (status == wgpu::RequestDeviceStatus::Success)
-                        device = d;
-                    else
-                        throw std::runtime_error(
-                            "RequestDevice failed: " +
-                            std::string(msg.data, msg.length)
-                        );
-                }
-            ),
-            UINT64_MAX
-        );
-        if (!device)
-            throw std::runtime_error("Failed to get WebGPU device!");
-
-        return device;
-    }();
+    practice::Device wgpu_;
+    wgpu_.init();
 
     practice::WindowSDL3 window(1280, 720, "PracticeDawn");
-    auto surface = ::createSurface(instance, window.get());
+    const auto surface = ::createSurface(wgpu_.instance_, window.get());
 
-    const auto caps = [&surface, &adapter]() {
-        wgpu::SurfaceCapabilities caps;
-        surface.GetCapabilities(adapter, &caps);
-        if (caps.formatCount == 0) {
-            throw std::runtime_error("Surface has no supported formats!");
-        }
-        return caps;
-    }();
+    const auto& device = wgpu_.device_;
+    const auto queue = device.GetQueue();
+    const auto caps = wgpu_.get_surface_caps(surface);
 
     wgpu::SurfaceConfiguration config{
         .device = device,
@@ -146,8 +69,6 @@ int main(int argc, char* argv[]) {
         .height = window.height(),
     };
     surface.Configure(&config);
-
-    auto queue = device.GetQueue();
 
     while (true) {
         while (auto event = window.poll_event()) {
@@ -177,13 +98,13 @@ int main(int argc, char* argv[]) {
             .colorAttachments = &colorAttachment,
         };
 
-        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        const auto encoder = wgpu_.create_cmd_encoder();
         wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPassDesc);
         pass.End();
         wgpu::CommandBuffer commands = encoder.Finish();
         queue.Submit(1, &commands);
         surface.Present();
-        instance.ProcessEvents();
+        wgpu_.process_events();
     }
 
     return EXIT_SUCCESS;

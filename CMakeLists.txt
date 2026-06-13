@@ -14,4 +14,5 @@ find_package(Dawn CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 
 
+add_subdirectory(lib/wgpu)
 add_subdirectory(app)
