@@ -11,39 +11,98 @@
     #include <windows.h>
 #endif
 
-static wgpu::Surface createSurface(
-    wgpu::Instance instance, SDL_Window* window
-) {
+
+namespace {
+
+    wgpu::Surface createSurface(wgpu::Instance instance, SDL_Window* window) {
 #if defined(__APPLE__)
-    SDL_MetalView view = SDL_Metal_CreateView(window);
-    wgpu::SurfaceSourceMetalLayer src{};
-    src.layer = SDL_Metal_GetLayer(view);
-    wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
-    return instance.CreateSurface(&desc);
+        SDL_MetalView view = SDL_Metal_CreateView(window);
+        wgpu::SurfaceSourceMetalLayer src{};
+        src.layer = SDL_Metal_GetLayer(view);
+        wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
+        return instance.CreateSurface(&desc);
 #elif defined(_WIN32)
-    wgpu::SurfaceSourceWindowsHWND src{};
-    src.hinstance = GetModuleHandle(nullptr);
-    src.hwnd = SDL_GetPointerProperty(
-        SDL_GetWindowProperties(window),
-        SDL_PROP_WINDOW_WIN32_HWND_POINTER,
-        nullptr
-    );
-    wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
-    return instance.CreateSurface(&desc);
+        wgpu::SurfaceSourceWindowsHWND src{};
+        src.hinstance = GetModuleHandle(nullptr);
+        src.hwnd = SDL_GetPointerProperty(
+            SDL_GetWindowProperties(window),
+            SDL_PROP_WINDOW_WIN32_HWND_POINTER,
+            nullptr
+        );
+        wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
+        return instance.CreateSurface(&desc);
 #else
-    wgpu::SurfaceSourceXlibWindow src{};
-    src.display = SDL_GetPointerProperty(
-        SDL_GetWindowProperties(window),
-        SDL_PROP_WINDOW_X11_DISPLAY_POINTER,
-        nullptr
-    );
-    src.window = static_cast<uint64_t>(SDL_GetNumberProperty(
-        SDL_GetWindowProperties(window), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0
-    ));
-    wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
-    return instance.CreateSurface(&desc);
+        wgpu::SurfaceSourceXlibWindow src{};
+        src.display = SDL_GetPointerProperty(
+            SDL_GetWindowProperties(window),
+            SDL_PROP_WINDOW_X11_DISPLAY_POINTER,
+            nullptr
+        );
+        src.window = static_cast<uint64_t>(SDL_GetNumberProperty(
+            SDL_GetWindowProperties(window),
+            SDL_PROP_WINDOW_X11_WINDOW_NUMBER,
+            0
+        ));
+        wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
+        return instance.CreateSurface(&desc);
 #endif
-}
+    }
+
+
+    class WindowSDL3 {
+
+    public:
+        WindowSDL3(int width, int height, const char* title) {
+            if (!SDL_Init(SDL_INIT_VIDEO)) {
+                std::cerr << "SDL_Init failed: " << SDL_GetError() << "\n";
+                throw std::runtime_error("Failed to initialize SDL!");
+            }
+
+            width_ = width;
+            height_ = height;
+            window_ = SDL_CreateWindow(
+                title, width, height, SDL_WINDOW_RESIZABLE
+            );
+            if (!window_) {
+                std::cerr << "SDL_CreateWindow failed: " << SDL_GetError()
+                          << "\n";
+                throw std::runtime_error("Failed to create SDL window!");
+            }
+        }
+
+        ~WindowSDL3() {
+            SDL_DestroyWindow(window_);
+            SDL_Quit();
+        }
+
+        SDL_Window* get() const { return window_; }
+        uint32_t width() const { return width_; }
+        uint32_t height() const { return height_; }
+
+        const SDL_Event* poll_event() {
+            if (SDL_PollEvent(&event_))
+                return &event_;
+            else
+                return nullptr;
+        }
+
+        wgpu::Surface create_surface(wgpu::Instance instance) const {
+            auto surface = ::createSurface(instance, window_);
+            if (!surface) {
+                throw std::runtime_error("Surface creation failed!");
+            }
+            return surface;
+        }
+
+    private:
+        SDL_Window* window_ = nullptr;
+        SDL_Event event_;
+        uint32_t width_ = 0;
+        uint32_t height_ = 0;
+    };
+
+}  // namespace
+
 
 int main(int argc, char* argv[]) {
     auto instance = []() {
@@ -120,52 +179,35 @@ int main(int argc, char* argv[]) {
         return device;
     }();
 
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
-        std::cerr << "SDL_Init failed: " << SDL_GetError() << "\n";
-        return EXIT_FAILURE;
-    }
+    WindowSDL3 window(1280, 720, "PracticeDawn");
+    auto surface = window.create_surface(instance);
 
-    constexpr uint32_t kWidth = 800, kHeight = 600;
-    SDL_Window* window = SDL_CreateWindow(
-        "PracticeDawn", kWidth, kHeight, SDL_WINDOW_RESIZABLE
-    );
-    if (!window) {
-        std::cerr << "SDL_CreateWindow failed: " << SDL_GetError() << "\n";
-        return EXIT_FAILURE;
-    }
-
-    wgpu::Surface surface = createSurface(instance, window);
-    if (!surface) {
-        std::cerr << "Surface creation failed!\n";
-        return EXIT_FAILURE;
-    }
-
-    wgpu::SurfaceCapabilities caps;
-    surface.GetCapabilities(adapter, &caps);
-    if (caps.formatCount == 0) {
-        std::cerr << "No surface formats available!\n";
-        return EXIT_FAILURE;
-    }
+    const auto caps = [&surface, &adapter]() {
+        wgpu::SurfaceCapabilities caps;
+        surface.GetCapabilities(adapter, &caps);
+        if (caps.formatCount == 0) {
+            throw std::runtime_error("Surface has no supported formats!");
+        }
+        return caps;
+    }();
 
     wgpu::SurfaceConfiguration config{
         .device = device,
         .format = caps.formats[0],
-        .width = kWidth,
-        .height = kHeight,
+        .width = window.width(),
+        .height = window.height(),
     };
     surface.Configure(&config);
 
-    wgpu::Queue queue = device.GetQueue();
+    auto queue = device.GetQueue();
 
-    SDL_Event event;
-    bool running = true;
-    while (running) {
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_EVENT_QUIT)
-                running = false;
-            if (event.type == SDL_EVENT_WINDOW_RESIZED) {
-                config.width = static_cast<uint32_t>(event.window.data1);
-                config.height = static_cast<uint32_t>(event.window.data2);
+    while (true) {
+        while (auto event = window.poll_event()) {
+            if (event->type == SDL_EVENT_QUIT)
+                return EXIT_SUCCESS;
+            if (event->type == SDL_EVENT_WINDOW_RESIZED) {
+                config.width = static_cast<uint32_t>(event->window.data1);
+                config.height = static_cast<uint32_t>(event->window.data2);
                 surface.Configure(&config);
             }
         }
@@ -196,7 +238,5 @@ int main(int argc, char* argv[]) {
         instance.ProcessEvents();
     }
 
-    SDL_DestroyWindow(window);
-    SDL_Quit();
     return EXIT_SUCCESS;
 }
