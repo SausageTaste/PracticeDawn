@@ -14,6 +14,10 @@ find_package(Dawn CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 
+if (WIN32)
+    find_package(directx-dxc CONFIG REQUIRED)
+endif()
+
 
 add_subdirectory(lib/wgpu)
 add_subdirectory(app)
