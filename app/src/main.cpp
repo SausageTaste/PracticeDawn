@@ -146,9 +146,9 @@ int main(int argc, char* argv[]) {
     wgpu::SurfaceConfiguration config{
         .device = device,
         .format = caps.formats[0],
-        .alphaMode = alphaMode,
         .width = window.width(),
         .height = window.height(),
+        .alphaMode = alphaMode,
     };
     surface.Configure(&config);
 
