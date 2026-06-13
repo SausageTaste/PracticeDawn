@@ -1,5 +1,6 @@
 #include "device.hpp"
 
+#include <stdexcept>
 #include <string>
 
 
