@@ -126,7 +126,9 @@ int main(int argc, char* argv[]) {
     }
 
     constexpr uint32_t kWidth = 800, kHeight = 600;
-    SDL_Window* window = SDL_CreateWindow("PracticeDawn", kWidth, kHeight, 0);
+    SDL_Window* window = SDL_CreateWindow(
+        "PracticeDawn", kWidth, kHeight, SDL_WINDOW_RESIZABLE
+    );
     if (!window) {
         std::cerr << "SDL_CreateWindow failed: " << SDL_GetError() << "\n";
         return EXIT_FAILURE;
@@ -158,9 +160,15 @@ int main(int argc, char* argv[]) {
     SDL_Event event;
     bool running = true;
     while (running) {
-        while (SDL_PollEvent(&event))
+        while (SDL_PollEvent(&event)) {
             if (event.type == SDL_EVENT_QUIT)
                 running = false;
+            if (event.type == SDL_EVENT_WINDOW_RESIZED) {
+                config.width = static_cast<uint32_t>(event.window.data1);
+                config.height = static_cast<uint32_t>(event.window.data2);
+                surface.Configure(&config);
+            }
+        }
 
         wgpu::SurfaceTexture surfaceTexture;
         surface.GetCurrentTexture(&surfaceTexture);
