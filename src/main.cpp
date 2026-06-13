@@ -2,7 +2,6 @@
 #include <iostream>
 #include <vector>
 
-#include <SDL3/SDL.h>
 #include <webgpu/webgpu_cpp.h>
 
 #if defined(__APPLE__)
@@ -10,6 +9,8 @@
 #elif defined(_WIN32)
     #include <windows.h>
 #endif
+
+#include "sdl_window.hpp"
 
 
 namespace {
@@ -47,59 +48,6 @@ namespace {
         return instance.CreateSurface(&desc);
 #endif
     }
-
-
-    class WindowSDL3 {
-
-    public:
-        WindowSDL3(int width, int height, const char* title) {
-            if (!SDL_Init(SDL_INIT_VIDEO)) {
-                std::cerr << "SDL_Init failed: " << SDL_GetError() << "\n";
-                throw std::runtime_error("Failed to initialize SDL!");
-            }
-
-            width_ = width;
-            height_ = height;
-            window_ = SDL_CreateWindow(
-                title, width, height, SDL_WINDOW_RESIZABLE
-            );
-            if (!window_) {
-                std::cerr << "SDL_CreateWindow failed: " << SDL_GetError()
-                          << "\n";
-                throw std::runtime_error("Failed to create SDL window!");
-            }
-        }
-
-        ~WindowSDL3() {
-            SDL_DestroyWindow(window_);
-            SDL_Quit();
-        }
-
-        SDL_Window* get() const { return window_; }
-        uint32_t width() const { return width_; }
-        uint32_t height() const { return height_; }
-
-        const SDL_Event* poll_event() {
-            if (SDL_PollEvent(&event_))
-                return &event_;
-            else
-                return nullptr;
-        }
-
-        wgpu::Surface create_surface(wgpu::Instance instance) const {
-            auto surface = ::createSurface(instance, window_);
-            if (!surface) {
-                throw std::runtime_error("Surface creation failed!");
-            }
-            return surface;
-        }
-
-    private:
-        SDL_Window* window_ = nullptr;
-        SDL_Event event_;
-        uint32_t width_ = 0;
-        uint32_t height_ = 0;
-    };
 
 }  // namespace
 
@@ -179,8 +127,8 @@ int main(int argc, char* argv[]) {
         return device;
     }();
 
-    WindowSDL3 window(1280, 720, "PracticeDawn");
-    auto surface = window.create_surface(instance);
+    practice::WindowSDL3 window(1280, 720, "PracticeDawn");
+    auto surface = ::createSurface(instance, window.get());
 
     const auto caps = [&surface, &adapter]() {
         wgpu::SurfaceCapabilities caps;
