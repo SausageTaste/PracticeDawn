@@ -136,9 +136,17 @@ int main(int argc, char* argv[]) {
     const auto surface = ::createSurface(wgpu_.instance_, window.get());
     const auto caps = wgpu_.get_surface_caps(surface);
 
+    const auto alphaMode = [&]() {
+        for (size_t i = 0; i < caps.alphaModeCount; i++)
+            if (caps.alphaModes[i] == wgpu::CompositeAlphaMode::Premultiplied)
+                return wgpu::CompositeAlphaMode::Premultiplied;
+        return wgpu::CompositeAlphaMode::Opaque;
+    }();
+
     wgpu::SurfaceConfiguration config{
         .device = device,
         .format = caps.formats[0],
+        .alphaMode = alphaMode,
         .width = window.width(),
         .height = window.height(),
     };
@@ -301,7 +309,7 @@ int main(int argc, char* argv[]) {
             .view = colorView,
             .loadOp = wgpu::LoadOp::Clear,
             .storeOp = wgpu::StoreOp::Store,
-            .clearValue = { 0.1, 0.1, 0.1, 1.0 },
+            .clearValue = { 0.0, 0.0, 0.0, 0.5 },
         };
         const wgpu::RenderPassDepthStencilAttachment depthAttachment{
             .view = depthView,

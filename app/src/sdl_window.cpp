@@ -15,7 +15,7 @@ namespace practice {
 
         width_ = width;
         height_ = height;
-        window_ = SDL_CreateWindow(title, width, height, SDL_WINDOW_RESIZABLE);
+        window_ = SDL_CreateWindow(title, width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_TRANSPARENT);
         if (!window_) {
             throw std::runtime_error(
                 std::format("Failed to create SDL window: {}", SDL_GetError())
