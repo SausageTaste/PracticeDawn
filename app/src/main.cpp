@@ -1,3 +1,4 @@
+#include <array>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -99,6 +100,23 @@ int main(int argc, char* argv[]) {
     const wgpu::ShaderModuleDescriptor shaderDesc{ .nextInChain = &wgslSource };
     const auto shader = device.CreateShaderModule(&shaderDesc);
 
+    const wgpu::BindGroupLayoutEntry bglEntry{
+        .binding = 0,
+        .visibility = wgpu::ShaderStage::Fragment,
+        .buffer = { .type = wgpu::BufferBindingType::Uniform },
+    };
+    const wgpu::BindGroupLayoutDescriptor bglDesc{
+        .entryCount = 1,
+        .entries = &bglEntry,
+    };
+    const auto bindGroupLayout = device.CreateBindGroupLayout(&bglDesc);
+
+    const wgpu::PipelineLayoutDescriptor layoutDesc{
+        .bindGroupLayoutCount = 1,
+        .bindGroupLayouts = &bindGroupLayout,
+    };
+    const auto pipelineLayout = device.CreatePipelineLayout(&layoutDesc);
+
     const wgpu::ColorTargetState colorTarget{ .format = caps.formats[0] };
     const wgpu::FragmentState fragmentState{
         .module = shader,
@@ -107,10 +125,31 @@ int main(int argc, char* argv[]) {
         .targets = &colorTarget,
     };
     const wgpu::RenderPipelineDescriptor pipelineDesc{
+        .layout = pipelineLayout,
         .vertex = { .module = shader, .entryPoint = "vs_main" },
         .fragment = &fragmentState,
     };
     const auto pipeline = device.CreateRenderPipeline(&pipelineDesc);
+
+    const std::array<float, 4> triangleColor = { 1.0f, 0.5f, 0.0f, 1.0f };
+    const wgpu::BufferDescriptor bufDesc{
+        .usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst,
+        .size = sizeof(triangleColor),
+    };
+    const auto uniformBuffer = device.CreateBuffer(&bufDesc);
+    queue.WriteBuffer(uniformBuffer, 0, triangleColor.data(), sizeof(triangleColor));
+
+    const wgpu::BindGroupEntry bgEntry{
+        .binding = 0,
+        .buffer = uniformBuffer,
+        .size = sizeof(triangleColor),
+    };
+    const wgpu::BindGroupDescriptor bgDesc{
+        .layout = bindGroupLayout,
+        .entryCount = 1,
+        .entries = &bgEntry,
+    };
+    const auto bindGroup = device.CreateBindGroup(&bgDesc);
 
     while (true) {
         while (auto event = window.poll_event()) {
@@ -144,6 +183,7 @@ int main(int argc, char* argv[]) {
         {
             const auto pass = encoder.BeginRenderPass(&renderPassDesc);
             pass.SetPipeline(pipeline);
+            pass.SetBindGroup(0, bindGroup);
             pass.Draw(3);
             pass.End();
         }
