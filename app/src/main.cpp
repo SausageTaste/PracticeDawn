@@ -1,4 +1,5 @@
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -111,8 +112,9 @@ int main(int argc, char* argv[]) {
         wgpu_.create_surface(desc, window.width(), window.height());
     }
     wgpu_.create_render_pass(::find_assets_dir());
-    auto cube = wgpu_.create_mesh(kVertices, kIndices);
-    wgpu_.add_actor(*cube, glm::mat4(1.0f));
+    auto cube_mesh = wgpu_.create_mesh(kVertices, kIndices);
+    auto& left_cube = wgpu_.add_actor(*cube_mesh, glm::mat4(1.0f));
+    auto& right_cube = wgpu_.add_actor(*cube_mesh, glm::mat4(1.0f));
 
     while (true) {
         while (auto event = window.poll_event()) {
@@ -131,14 +133,25 @@ int main(int argc, char* argv[]) {
             glm::radians(60.0f), aspect, 0.1f, 100.0f
         );
         const auto view = glm::translate(
-            glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -3.0f)
+            glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -4.0f)
         );
-        const auto model = glm::rotate(glm::mat4(1.0f), t, glm::vec3(0, 1, 0)) *
-                           glm::rotate(
-                               glm::mat4(1.0f), t * 0.5f, glm::vec3(1, 0, 0)
-                           );
-        const auto mvp = proj * view * model;
-        wgpu_.tick(mvp);
+
+        const auto left_model =
+            glm::translate(glm::mat4(1.0f), glm::vec3(-0.9f, 0.0f, 0.0f)) *
+            glm::rotate(glm::mat4(1.0f), t, glm::vec3(0, 1, 0)) *
+            glm::rotate(glm::mat4(1.0f), t * 0.5f, glm::vec3(1, 0, 0));
+
+        const auto right_model =
+            glm::translate(
+                glm::mat4(1.0f),
+                glm::vec3(0.9f, 0.35f * std::sin(t * 1.7f), 0.0f)
+            ) *
+            glm::rotate(glm::mat4(1.0f), -t * 1.4f, glm::vec3(1, 1, 0)) *
+            glm::scale(glm::mat4(1.0f), glm::vec3(0.7f));
+
+        wgpu_.update_actor(left_cube, proj * view * left_model);
+        wgpu_.update_actor(right_cube, proj * view * right_model);
+        wgpu_.tick();
     }
 
     return EXIT_SUCCESS;
