@@ -90,10 +90,6 @@ namespace practice {
         void on_fbuf_resize(uint32_t new_width, uint32_t new_height);
 
     private:
-        static wgpu::TextureView make_depth_view(
-            const wgpu::Device& device, uint32_t w, uint32_t h
-        );
-
         DevicePackage device_pkg_;
         SurfacePackage surface_pkg_;
 

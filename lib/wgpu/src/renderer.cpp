@@ -52,6 +52,18 @@ namespace {
         20, 21, 22, 20, 22, 23,  // bottom
     } };
 
+
+    wgpu::TextureView make_depth_view(
+        const wgpu::Device& device, uint32_t w, uint32_t h
+    ) {
+        const wgpu::TextureDescriptor desc{
+            .usage = wgpu::TextureUsage::RenderAttachment,
+            .size = { w, h, 1 },
+            .format = wgpu::TextureFormat::Depth24Plus,
+        };
+        return device.CreateTexture(&desc).CreateView();
+    }
+
 }  // namespace
 
 
@@ -243,7 +255,7 @@ namespace practice {
         // Render pipeline
         constexpr wgpu::TextureFormat kDepthFormat =
             wgpu::TextureFormat::Depth24Plus;
-        depth_view_ = this->make_depth_view(
+        depth_view_ = ::make_depth_view(
             device, surface_pkg_.width(), surface_pkg_.height()
         );
 
@@ -328,20 +340,9 @@ namespace practice {
 
     void Renderer::on_fbuf_resize(uint32_t new_width, uint32_t new_height) {
         surface_pkg_.on_fbuf_resize(new_width, new_height);
-        depth_view_ = this->make_depth_view(
+        depth_view_ = ::make_depth_view(
             device_pkg_.device_, surface_pkg_.width(), surface_pkg_.height()
         );
-    }
-
-    wgpu::TextureView Renderer::make_depth_view(
-        const wgpu::Device& device, uint32_t w, uint32_t h
-    ) {
-        const wgpu::TextureDescriptor desc{
-            .usage = wgpu::TextureUsage::RenderAttachment,
-            .size = { w, h, 1 },
-            .format = wgpu::TextureFormat::Depth24Plus,
-        };
-        return device.CreateTexture(&desc).CreateView();
     }
 
 }  // namespace practice
