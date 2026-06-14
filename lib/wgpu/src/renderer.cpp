@@ -160,10 +160,10 @@ namespace practice {
 }  // namespace practice
 
 
-// MeshActor
+// Actor
 namespace practice {
 
-    void MeshActor::init(
+    void Actor::init(
         const wgpu::BindGroupLayout& group_layout, const wgpu::Device& device
     ) {
         // MVP uniform buffer
@@ -187,9 +187,7 @@ namespace practice {
         bind_group_ = device.CreateBindGroup(&bgDesc);
     }
 
-    void MeshActor::update_ubuf(
-        const glm::mat4& mvp, const wgpu::Queue& queue
-    ) {
+    void Actor::update_ubuf(const glm::mat4& mvp, const wgpu::Queue& queue) {
         queue.WriteBuffer(ubuf_, 0, glm::value_ptr(mvp), sizeof(glm::mat4));
     }
 

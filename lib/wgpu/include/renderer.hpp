@@ -54,7 +54,7 @@ namespace practice {
     };
 
 
-    class MeshActor {
+    class Actor {
 
     public:
         void init(
@@ -98,7 +98,7 @@ namespace practice {
 
         wgpu::RenderPipeline pipeline_;
         Mesh mesh_;
-        MeshActor actor_;
+        Actor actor_;
     };
 
 }  // namespace practice
