@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 
 #include "device.hpp"
+#include "transform.hpp"
 
 
 namespace practice {
@@ -93,6 +94,7 @@ namespace practice {
         };
 
         std::vector<std::shared_ptr<MeshActor>> mesh_actors_;
+        TransformQuat camera_view_;
     };
 
 
@@ -110,7 +112,6 @@ namespace practice {
         void create_render_pass(const std::filesystem::path& asset_dir);
 
         void tick();
-        void tick(const glm::mat4& mvp);
 
         void on_fbuf_resize(uint32_t new_width, uint32_t new_height);
 
@@ -121,6 +122,8 @@ namespace practice {
 
         Actor& add_actor(Scene::MeshActor& meshActor, const glm::mat4& mvp);
         void update_actor(Actor& actor, const glm::mat4& mvp);
+
+        auto& scene() { return scene_; }
 
     private:
         DevicePackage device_pkg_;

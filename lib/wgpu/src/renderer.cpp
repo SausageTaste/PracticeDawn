@@ -307,14 +307,6 @@ namespace practice {
         device_pkg_.process_events();
     }
 
-    void Renderer::tick(const glm::mat4& mvp) {
-        for (const auto& meshActor : scene_.mesh_actors_)
-            for (auto& actor : meshActor->actors_)
-                actor.update_ubuf(mvp, queue_);
-
-        tick();
-    }
-
     void Renderer::on_fbuf_resize(uint32_t new_width, uint32_t new_height) {
         surface_pkg_.on_fbuf_resize(new_width, new_height);
         depth_view_ = ::make_depth_view(
