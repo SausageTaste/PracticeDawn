@@ -116,11 +116,19 @@ int main(int argc, char* argv[]) {
     auto& left_cube = wgpu_.add_actor(*cube_mesh, glm::mat4(1.0f));
     auto& right_cube = wgpu_.add_actor(*cube_mesh, glm::mat4(1.0f));
 
+    left_cube.tform_.set_pos(-0.9, 0, 0);
+    right_cube.tform_.set_pos(0.9, 0, 0);
+
     auto& scene = wgpu_.scene();
     auto& camera_view = scene.camera_view_;
     camera_view.set_pos(0, 0, 4);
 
+    auto last_tick = SDL_GetTicks();
+
     while (true) {
+        const auto dt = (SDL_GetTicks() - last_tick) / 1000.0;
+        last_tick = SDL_GetTicks();
+
         while (auto event = window.poll_event()) {
             if (event->type == SDL_EVENT_QUIT)
                 return EXIT_SUCCESS;
@@ -129,28 +137,9 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // Compute and upload MVP
-        const double t = SDL_GetTicks() / 1000.0;
-        const double aspect = static_cast<double>(window.width()) /
-                              static_cast<double>(window.height());
-        const auto proj = glm::perspectiveRH_ZO(
-            glm::radians(60.0), aspect, 0.1, 100.0
-        );
-        const auto view = camera_view.make_view_mat();
+        left_cube.tform_.rotate(dt, glm::dvec3(0, 1, 0));
+        right_cube.tform_.rotate(dt, glm::dvec3(1, 1, 0));
 
-        const auto left_model =
-            glm::translate(glm::dmat4(1.0), glm::dvec3(-0.9, 0.0, 0.0)) *
-            glm::rotate(glm::dmat4(1.0), t, glm::dvec3(0, 1, 0)) *
-            glm::rotate(glm::dmat4(1.0), t * 0.5, glm::dvec3(1, 0, 0));
-
-        const auto right_model =
-            glm::translate(
-                glm::dmat4(1.0), glm::dvec3(0.9, 0.35 * std::sin(t * 1.7), 0.0)
-            ) *
-            glm::rotate(glm::dmat4(1.0), -t * 1.4, glm::dvec3(1, 1, 0)) *
-            glm::scale(glm::dmat4(1.0), glm::dvec3(0.7));
-        wgpu_.update_actor(left_cube, proj * view * left_model);
-        wgpu_.update_actor(right_cube, proj * view * right_model);
         wgpu_.tick();
     }
 

@@ -263,6 +263,21 @@ namespace practice {
     }
 
     void Renderer::tick() {
+        const double aspect = static_cast<double>(surface_pkg_.width()) /
+                              static_cast<double>(surface_pkg_.height());
+        const auto proj = glm::perspectiveRH_ZO(
+            glm::radians(60.0), aspect, 0.1, 1000.0
+        );
+        const auto view = scene_.camera_view_.make_view_mat();
+        const auto pv = proj * view;
+
+        for (auto& meshActor : scene_.mesh_actors_) {
+            for (auto& actor : meshActor->actors_) {
+                const auto pvm = pv * actor.tform_.make_model_mat();
+                actor.update_ubuf(pvm, queue_);
+            }
+        }
+
         const auto colorView = surface_pkg_.acquire_color_view();
         const wgpu::RenderPassColorAttachment colorAttachment{
             .view = colorView,
@@ -333,10 +348,6 @@ namespace practice {
         );
         meshActor.actors_.back().update_ubuf(mvp, queue_);
         return meshActor.actors_.back();
-    }
-
-    void Renderer::update_actor(Actor& actor, const glm::mat4& mvp) {
-        actor.update_ubuf(mvp, queue_);
     }
 
 }  // namespace practice

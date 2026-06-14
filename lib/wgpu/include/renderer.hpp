@@ -79,6 +79,8 @@ namespace practice {
 
         auto& bind_group() const { return bind_group_; }
 
+        TransformQuat tform_;
+
     private:
         wgpu::Buffer ubuf_;
         wgpu::BindGroup bind_group_;
@@ -121,7 +123,6 @@ namespace practice {
         );
 
         Actor& add_actor(Scene::MeshActor& meshActor, const glm::mat4& mvp);
-        void update_actor(Actor& actor, const glm::mat4& mvp);
 
         auto& scene() { return scene_; }
 
