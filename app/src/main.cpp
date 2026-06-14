@@ -20,40 +20,6 @@
 
 namespace {
 
-    wgpu::SurfaceDescriptor create_surface_desc(SDL_Window* window) {
-#if defined(__APPLE__)
-        SDL_MetalView view = SDL_Metal_CreateView(window);
-        wgpu::SurfaceSourceMetalLayer src{};
-        src.layer = SDL_Metal_GetLayer(view);
-        wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
-        return desc;
-#elif defined(_WIN32)
-        wgpu::SurfaceSourceWindowsHWND src{};
-        src.hinstance = GetModuleHandle(nullptr);
-        src.hwnd = SDL_GetPointerProperty(
-            SDL_GetWindowProperties(window),
-            SDL_PROP_WINDOW_WIN32_HWND_POINTER,
-            nullptr
-        );
-        wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
-        return desc;
-#else
-        wgpu::SurfaceSourceXlibWindow src{};
-        src.display = SDL_GetPointerProperty(
-            SDL_GetWindowProperties(window),
-            SDL_PROP_WINDOW_X11_DISPLAY_POINTER,
-            nullptr
-        );
-        src.window = static_cast<uint64_t>(SDL_GetNumberProperty(
-            SDL_GetWindowProperties(window),
-            SDL_PROP_WINDOW_X11_WINDOW_NUMBER,
-            0
-        ));
-        wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
-        return desc;
-#endif
-    }
-
     std::filesystem::path find_assets_dir() {
         std::filesystem::path path = std::filesystem::current_path();
         while (path.has_parent_path()) {
@@ -64,8 +30,6 @@ namespace {
         throw std::runtime_error("Failed to find assets directory!");
     }
 
-    // ---- Cube geometry: 24 vertices (4 per face), 36 indices ----
-
 }  // namespace
 
 
@@ -74,8 +38,37 @@ int main(int argc, char* argv[]) {
     wgpu_.init();
 
     practice::WindowSDL3 window(1280, 720, "PracticeDawn");
-    const auto surf_desc = ::create_surface_desc(window.get());
-    wgpu_.create_surface(surf_desc, window.width(), window.height());
+    {
+#if defined(__APPLE__)
+        SDL_MetalView view = SDL_Metal_CreateView(window);
+        wgpu::SurfaceSourceMetalLayer src{};
+        src.layer = SDL_Metal_GetLayer(view);
+        wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
+#elif defined(_WIN32)
+        wgpu::SurfaceSourceWindowsHWND src{};
+        src.hinstance = GetModuleHandle(nullptr);
+        src.hwnd = SDL_GetPointerProperty(
+            SDL_GetWindowProperties(window.get()),
+            SDL_PROP_WINDOW_WIN32_HWND_POINTER,
+            nullptr
+        );
+        wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
+#else
+        wgpu::SurfaceSourceXlibWindow src{};
+        src.display = SDL_GetPointerProperty(
+            SDL_GetWindowProperties(window.get()),
+            SDL_PROP_WINDOW_X11_DISPLAY_POINTER,
+            nullptr
+        );
+        src.window = static_cast<uint64_t>(SDL_GetNumberProperty(
+            SDL_GetWindowProperties(window.get()),
+            SDL_PROP_WINDOW_X11_WINDOW_NUMBER,
+            0
+        ));
+        wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
+#endif
+        wgpu_.create_surface(desc, window.width(), window.height());
+    }
     wgpu_.create_render_pass(::find_assets_dir());
 
     while (true) {
