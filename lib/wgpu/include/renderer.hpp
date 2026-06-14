@@ -1,6 +1,10 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
+#include <fstream>
+#include <stdexcept>
+#include <string>
 
 #include "device.hpp"
 
@@ -77,17 +81,12 @@ namespace practice {
             config_ = wgpu::SurfaceConfiguration{
                 .device = dpkg.device_,
                 .format = caps_.formats[0],
+                .usage = wgpu::TextureUsage::RenderAttachment,
                 .width = width,
                 .height = height,
                 .alphaMode = alphaMode,
             };
             surface_.Configure(&config_);
-
-            surface_.GetCurrentTexture(&tex_);
-            if (!tex_.texture)
-                throw std::runtime_error("Failed to acquire surface texture");
-
-            color_view_ = tex_.texture.CreateView();
         }
 
         void present() const { surface_.Present(); }
@@ -96,16 +95,33 @@ namespace practice {
             config_.width = new_width;
             config_.height = new_height;
             surface_.Configure(&config_);
+        }
 
+        wgpu::TextureView acquire_color_view() {
+            tex_ = {};
             surface_.GetCurrentTexture(&tex_);
-            if (!tex_.texture)
-                throw std::runtime_error("Failed to acquire surface texture");
 
-            color_view_ = tex_.texture.CreateView();
+            switch (tex_.status) {
+            case wgpu::SurfaceGetCurrentTextureStatus::SuccessOptimal:
+            case wgpu::SurfaceGetCurrentTextureStatus::SuccessSuboptimal:
+                if (!tex_.texture)
+                    throw std::runtime_error(
+                        "Surface returned success without a texture"
+                    );
+                return tex_.texture.CreateView();
+            case wgpu::SurfaceGetCurrentTextureStatus::Timeout:
+                throw std::runtime_error("Timed out acquiring surface texture");
+            case wgpu::SurfaceGetCurrentTextureStatus::Outdated:
+                throw std::runtime_error("Surface texture is outdated");
+            case wgpu::SurfaceGetCurrentTextureStatus::Lost:
+                throw std::runtime_error("Surface texture was lost");
+            case wgpu::SurfaceGetCurrentTextureStatus::Error:
+            default:
+                throw std::runtime_error("Failed to acquire surface texture");
+            }
         }
 
         auto& caps() const { return caps_; }
-        auto& color_view() const { return color_view_; }
         auto width() const { return config_.width; }
         auto height() const { return config_.height; }
 
@@ -114,7 +130,6 @@ namespace practice {
         wgpu::SurfaceCapabilities caps_;
         wgpu::SurfaceConfiguration config_;
         wgpu::SurfaceTexture tex_;
-        wgpu::TextureView color_view_;
     };
 
 
@@ -266,8 +281,9 @@ namespace practice {
                 ubuf_, 0, glm::value_ptr(mvp), sizeof(glm::mat4)
             );
 
+            const auto colorView = surface_pkg_.acquire_color_view();
             const wgpu::RenderPassColorAttachment colorAttachment{
-                .view = surface_pkg_.color_view(),
+                .view = colorView,
                 .loadOp = wgpu::LoadOp::Clear,
                 .storeOp = wgpu::StoreOp::Store,
                 .clearValue = { 0.0, 0.0, 0.0, 0.5 },
