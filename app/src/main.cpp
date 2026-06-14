@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
     practice::WindowSDL3 window(1280, 720, "PracticeDawn");
     {
 #if defined(__APPLE__)
-        SDL_MetalView view = SDL_Metal_CreateView(window);
+        SDL_MetalView view = SDL_Metal_CreateView(window.get());
         wgpu::SurfaceSourceMetalLayer src{};
         src.layer = SDL_Metal_GetLayer(view);
         wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
