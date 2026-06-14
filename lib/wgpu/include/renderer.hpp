@@ -1,10 +1,6 @@
 #pragma once
 
-#include <array>
 #include <filesystem>
-#include <fstream>
-#include <stdexcept>
-#include <string>
 
 #include <glm/glm.hpp>
 
@@ -12,53 +8,6 @@
 
 
 namespace practice {
-
-    struct Vertex {
-        float x, y, z, r, g, b, a;
-    };
-
-    constexpr std::array<Vertex, 24> kVertices{ {
-        // Front  (+Z) - red
-        { -0.5f, -0.5f, 0.5f, 1, 0, 0, 1 },
-        { 0.5f, -0.5f, 0.5f, 1, 0, 0, 1 },
-        { 0.5f, 0.5f, 0.5f, 1, 0, 0, 1 },
-        { -0.5f, 0.5f, 0.5f, 1, 0, 0, 1 },
-        // Back   (-Z) - green
-        { 0.5f, -0.5f, -0.5f, 0, 1, 0, 1 },
-        { -0.5f, -0.5f, -0.5f, 0, 1, 0, 1 },
-        { -0.5f, 0.5f, -0.5f, 0, 1, 0, 1 },
-        { 0.5f, 0.5f, -0.5f, 0, 1, 0, 1 },
-        // Right  (+X) - blue
-        { 0.5f, -0.5f, 0.5f, 0, 0, 1, 1 },
-        { 0.5f, -0.5f, -0.5f, 0, 0, 1, 1 },
-        { 0.5f, 0.5f, -0.5f, 0, 0, 1, 1 },
-        { 0.5f, 0.5f, 0.5f, 0, 0, 1, 1 },
-        // Left   (-X) - yellow
-        { -0.5f, -0.5f, -0.5f, 1, 1, 0, 1 },
-        { -0.5f, -0.5f, 0.5f, 1, 1, 0, 1 },
-        { -0.5f, 0.5f, 0.5f, 1, 1, 0, 1 },
-        { -0.5f, 0.5f, -0.5f, 1, 1, 0, 1 },
-        // Top    (+Y) - cyan
-        { -0.5f, 0.5f, 0.5f, 0, 1, 1, 1 },
-        { 0.5f, 0.5f, 0.5f, 0, 1, 1, 1 },
-        { 0.5f, 0.5f, -0.5f, 0, 1, 1, 1 },
-        { -0.5f, 0.5f, -0.5f, 0, 1, 1, 1 },
-        // Bottom (-Y) - magenta
-        { -0.5f, -0.5f, -0.5f, 1, 0, 1, 1 },
-        { 0.5f, -0.5f, -0.5f, 1, 0, 1, 1 },
-        { 0.5f, -0.5f, 0.5f, 1, 0, 1, 1 },
-        { -0.5f, -0.5f, 0.5f, 1, 0, 1, 1 },
-    } };
-
-    constexpr std::array<uint16_t, 36> kIndices{ {
-        0,  1,  2,  0,  2,  3,   // front
-        4,  5,  6,  4,  6,  7,   // back
-        8,  9,  10, 8,  10, 11,  // right
-        12, 13, 14, 12, 14, 15,  // left
-        16, 17, 18, 16, 18, 19,  // top
-        20, 21, 22, 20, 22, 23,  // bottom
-    } };
-
 
     class SurfacePackage {
 
@@ -83,6 +32,43 @@ namespace practice {
         wgpu::SurfaceCapabilities caps_;
         wgpu::SurfaceConfiguration config_;
         wgpu::SurfaceTexture tex_;
+    };
+
+
+    class Mesh {
+
+    public:
+        struct Vertex {
+            float x, y, z, r, g, b, a;
+        };
+
+    public:
+        void init(const wgpu::Queue& queue, const wgpu::Device& device);
+
+        auto& vtx_buf() const { return vtx_buf_; }
+        auto& idx_buf() const { return idx_buf_; }
+
+    private:
+        wgpu::Buffer vtx_buf_;
+        wgpu::Buffer idx_buf_;
+    };
+
+
+    class MeshActor {
+
+    public:
+        void init(
+            const wgpu::BindGroupLayout& group_layout,
+            const wgpu::Device& device
+        );
+
+        void update_ubuf(const glm::mat4& mvp, const wgpu::Queue& queue);
+
+        auto& bind_group() const { return bind_group_; }
+
+    private:
+        wgpu::Buffer ubuf_;
+        wgpu::BindGroup bind_group_;
     };
 
 
@@ -115,10 +101,8 @@ namespace practice {
         wgpu::TextureView depth_view_;
 
         wgpu::RenderPipeline pipeline_;
-        wgpu::BindGroup bind_group_;
-        wgpu::Buffer vtx_buf_;
-        wgpu::Buffer idx_buf_;
-        wgpu::Buffer ubuf_;
+        Mesh mesh_;
+        MeshActor actor_;
     };
 
 }  // namespace practice

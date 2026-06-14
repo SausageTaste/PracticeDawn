@@ -1,6 +1,58 @@
 #include "renderer.hpp"
 
+#include <array>
+#include <fstream>
+#include <stdexcept>
+#include <string>
+
 #include <glm/gtc/type_ptr.hpp>
+
+
+namespace {
+
+    constexpr std::array<practice::Mesh::Vertex, 24> kVertices{ {
+        // Front  (+Z) - red
+        { -0.5f, -0.5f, 0.5f, 1, 0, 0, 1 },
+        { 0.5f, -0.5f, 0.5f, 1, 0, 0, 1 },
+        { 0.5f, 0.5f, 0.5f, 1, 0, 0, 1 },
+        { -0.5f, 0.5f, 0.5f, 1, 0, 0, 1 },
+        // Back   (-Z) - green
+        { 0.5f, -0.5f, -0.5f, 0, 1, 0, 1 },
+        { -0.5f, -0.5f, -0.5f, 0, 1, 0, 1 },
+        { -0.5f, 0.5f, -0.5f, 0, 1, 0, 1 },
+        { 0.5f, 0.5f, -0.5f, 0, 1, 0, 1 },
+        // Right  (+X) - blue
+        { 0.5f, -0.5f, 0.5f, 0, 0, 1, 1 },
+        { 0.5f, -0.5f, -0.5f, 0, 0, 1, 1 },
+        { 0.5f, 0.5f, -0.5f, 0, 0, 1, 1 },
+        { 0.5f, 0.5f, 0.5f, 0, 0, 1, 1 },
+        // Left   (-X) - yellow
+        { -0.5f, -0.5f, -0.5f, 1, 1, 0, 1 },
+        { -0.5f, -0.5f, 0.5f, 1, 1, 0, 1 },
+        { -0.5f, 0.5f, 0.5f, 1, 1, 0, 1 },
+        { -0.5f, 0.5f, -0.5f, 1, 1, 0, 1 },
+        // Top    (+Y) - cyan
+        { -0.5f, 0.5f, 0.5f, 0, 1, 1, 1 },
+        { 0.5f, 0.5f, 0.5f, 0, 1, 1, 1 },
+        { 0.5f, 0.5f, -0.5f, 0, 1, 1, 1 },
+        { -0.5f, 0.5f, -0.5f, 0, 1, 1, 1 },
+        // Bottom (-Y) - magenta
+        { -0.5f, -0.5f, -0.5f, 1, 0, 1, 1 },
+        { 0.5f, -0.5f, -0.5f, 1, 0, 1, 1 },
+        { 0.5f, -0.5f, 0.5f, 1, 0, 1, 1 },
+        { -0.5f, -0.5f, 0.5f, 1, 0, 1, 1 },
+    } };
+
+    constexpr std::array<uint16_t, 36> kIndices{ {
+        0,  1,  2,  0,  2,  3,   // front
+        4,  5,  6,  4,  6,  7,   // back
+        8,  9,  10, 8,  10, 11,  // right
+        12, 13, 14, 12, 14, 15,  // left
+        16, 17, 18, 16, 18, 19,  // top
+        20, 21, 22, 20, 22, 23,  // bottom
+    } };
+
+}  // namespace
 
 
 // SurfacePackage
@@ -71,6 +123,67 @@ namespace practice {
 }  // namespace practice
 
 
+// Mesh
+namespace practice {
+
+    void Mesh::init(const wgpu::Queue& queue, const wgpu::Device& device) {
+        // Geometry buffers
+        constexpr uint64_t kVbSize = kVertices.size() * sizeof(Vertex);
+        const wgpu::BufferDescriptor vbDesc{
+            .usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst,
+            .size = kVbSize,
+        };
+        vtx_buf_ = device.CreateBuffer(&vbDesc);
+        queue.WriteBuffer(vtx_buf_, 0, kVertices.data(), kVbSize);
+
+        constexpr uint64_t kIbSize = kIndices.size() * sizeof(uint16_t);
+        const wgpu::BufferDescriptor ibDesc{
+            .usage = wgpu::BufferUsage::Index | wgpu::BufferUsage::CopyDst,
+            .size = kIbSize,
+        };
+        idx_buf_ = device.CreateBuffer(&ibDesc);
+        queue.WriteBuffer(idx_buf_, 0, kIndices.data(), kIbSize);
+    }
+
+}  // namespace practice
+
+
+// MeshActor
+namespace practice {
+
+    void MeshActor::init(
+        const wgpu::BindGroupLayout& group_layout, const wgpu::Device& device
+    ) {
+        // MVP uniform buffer
+        const wgpu::BufferDescriptor ubDesc{
+            .usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst,
+            .size = sizeof(glm::mat4),
+        };
+        ubuf_ = device.CreateBuffer(&ubDesc);
+
+        // Bind group
+        const wgpu::BindGroupEntry bgEntry{
+            .binding = 0,
+            .buffer = ubuf_,
+            .size = sizeof(glm::mat4),
+        };
+        const wgpu::BindGroupDescriptor bgDesc{
+            .layout = group_layout,
+            .entryCount = 1,
+            .entries = &bgEntry,
+        };
+        bind_group_ = device.CreateBindGroup(&bgDesc);
+    }
+
+    void MeshActor::update_ubuf(
+        const glm::mat4& mvp, const wgpu::Queue& queue
+    ) {
+        queue.WriteBuffer(ubuf_, 0, glm::value_ptr(mvp), sizeof(glm::mat4));
+    }
+
+}  // namespace practice
+
+
 // Renderer
 namespace practice {
 
@@ -106,30 +219,6 @@ namespace practice {
         };
         const auto shader = device_pkg_.device_.CreateShaderModule(&shaderDesc);
 
-        // Geometry buffers
-        constexpr uint64_t kVbSize = kVertices.size() * sizeof(Vertex);
-        const wgpu::BufferDescriptor vbDesc{
-            .usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst,
-            .size = kVbSize,
-        };
-        vtx_buf_ = device.CreateBuffer(&vbDesc);
-        queue_.WriteBuffer(vtx_buf_, 0, kVertices.data(), kVbSize);
-
-        constexpr uint64_t kIbSize = kIndices.size() * sizeof(uint16_t);
-        const wgpu::BufferDescriptor ibDesc{
-            .usage = wgpu::BufferUsage::Index | wgpu::BufferUsage::CopyDst,
-            .size = kIbSize,
-        };
-        idx_buf_ = device.CreateBuffer(&ibDesc);
-        queue_.WriteBuffer(idx_buf_, 0, kIndices.data(), kIbSize);
-
-        // MVP uniform buffer
-        const wgpu::BufferDescriptor ubDesc{
-            .usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst,
-            .size = sizeof(glm::mat4),
-        };
-        ubuf_ = device.CreateBuffer(&ubDesc);
-
         // Bind group layout (uniform at binding 0, visible to vertex stage)
         const wgpu::BindGroupLayoutEntry bglEntry{
             .binding = 0,
@@ -148,18 +237,8 @@ namespace practice {
         };
         const auto pipelineLayout = device.CreatePipelineLayout(&layoutDesc);
 
-        // Bind group
-        const wgpu::BindGroupEntry bgEntry{
-            .binding = 0,
-            .buffer = ubuf_,
-            .size = sizeof(glm::mat4),
-        };
-        const wgpu::BindGroupDescriptor bgDesc{
-            .layout = bindGroupLayout,
-            .entryCount = 1,
-            .entries = &bgEntry,
-        };
-        bind_group_ = device.CreateBindGroup(&bgDesc);
+        mesh_.init(queue_, device);
+        actor_.init(bindGroupLayout, device);
 
         // Render pipeline
         constexpr wgpu::TextureFormat kDepthFormat =
@@ -177,7 +256,7 @@ namespace practice {
               .shaderLocation = 1 },
         } };
         const wgpu::VertexBufferLayout vertexLayout{
-            .arrayStride = sizeof(Vertex),
+            .arrayStride = sizeof(Mesh::Vertex),
             .attributeCount = vertexAttribs.size(),
             .attributes = vertexAttribs.data(),
         };
@@ -210,7 +289,7 @@ namespace practice {
     }
 
     void Renderer::tick(const glm::mat4& mvp) {
-        queue_.WriteBuffer(ubuf_, 0, glm::value_ptr(mvp), sizeof(glm::mat4));
+        actor_.update_ubuf(mvp, queue_);
 
         const auto colorView = surface_pkg_.acquire_color_view();
         const wgpu::RenderPassColorAttachment colorAttachment{
@@ -235,9 +314,9 @@ namespace practice {
         {
             const auto pass = encoder.BeginRenderPass(&renderPassDesc);
             pass.SetPipeline(pipeline_);
-            pass.SetBindGroup(0, bind_group_);
-            pass.SetVertexBuffer(0, vtx_buf_);
-            pass.SetIndexBuffer(idx_buf_, wgpu::IndexFormat::Uint16);
+            pass.SetBindGroup(0, actor_.bind_group());
+            pass.SetVertexBuffer(0, mesh_.vtx_buf());
+            pass.SetIndexBuffer(mesh_.idx_buf(), wgpu::IndexFormat::Uint16);
             pass.DrawIndexed(static_cast<uint32_t>(kIndices.size()));
             pass.End();
         }
