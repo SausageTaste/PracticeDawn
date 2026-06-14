@@ -5,7 +5,7 @@
 
 namespace practice {
 
-    class Device {
+    class DevicePackage {
 
     public:
         void init();

@@ -6,7 +6,7 @@
 
 namespace practice {
 
-    void Device::init() {
+    void DevicePackage::init() {
         {
             const std::vector<wgpu::InstanceFeatureName> required_features{
                 wgpu::InstanceFeatureName::TimedWaitAny,
@@ -76,7 +76,7 @@ namespace practice {
         }
     }
 
-    wgpu::SurfaceCapabilities Device::get_surface_caps(
+    wgpu::SurfaceCapabilities DevicePackage::get_surface_caps(
         const wgpu::Surface& surface
     ) const {
         wgpu::SurfaceCapabilities caps;
