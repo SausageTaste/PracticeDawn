@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdlib>
@@ -13,11 +14,14 @@
     #include <windows.h>
 #endif
 
+#include "cam_ctrl.hpp"
 #include "renderer.hpp"
 #include "sdl_window.hpp"
 
 
 namespace {
+
+    constexpr double kPi = 3.14159265358979323846;
 
     constexpr std::array<practice::Mesh::Vertex, 24> kVertices{ {
         // Front  (+Z) - red
@@ -122,6 +126,8 @@ int main(int argc, char* argv[]) {
     auto& scene = wgpu_.scene();
     auto& camera_view = scene.camera_view_;
     camera_view.set_pos(0, 0, 4);
+    practice::CameraInput camera_input;
+    practice::update_camera(camera_view, camera_input, 0.0);
 
     auto last_tick = SDL_GetTicks();
 
@@ -135,7 +141,36 @@ int main(int argc, char* argv[]) {
             if (event->type == SDL_EVENT_WINDOW_RESIZED) {
                 wgpu_.on_fbuf_resize(event->window.data1, event->window.data2);
             }
+            if (event->type == SDL_EVENT_KEY_DOWN ||
+                event->type == SDL_EVENT_KEY_UP) {
+                if (event->key.key == SDLK_ESCAPE && event->key.down)
+                    return EXIT_SUCCESS;
+                set_key(camera_input, event->key.key, event->key.down);
+            }
+            if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                event->button.button == SDL_BUTTON_RIGHT) {
+                camera_input.mouse_look = true;
+                SDL_SetWindowRelativeMouseMode(window.get(), true);
+            }
+            if (event->type == SDL_EVENT_MOUSE_BUTTON_UP &&
+                event->button.button == SDL_BUTTON_RIGHT) {
+                camera_input.mouse_look = false;
+                SDL_SetWindowRelativeMouseMode(window.get(), false);
+            }
+            if (event->type == SDL_EVENT_MOUSE_MOTION &&
+                camera_input.mouse_look) {
+                constexpr double kMouseSensitivity = 0.0025;
+                constexpr double kPitchLimit = kPi * 0.49;
+                camera_input.yaw += event->motion.xrel * kMouseSensitivity;
+                camera_input.pitch = std::clamp(
+                    camera_input.pitch - event->motion.yrel * kMouseSensitivity,
+                    -kPitchLimit,
+                    kPitchLimit
+                );
+            }
         }
+
+        practice::update_camera(camera_view, camera_input, dt);
 
         left_cube.tform_.rotate(dt, glm::dvec3(0, 1, 0));
         right_cube.tform_.rotate(dt, glm::dvec3(1, 1, 0));

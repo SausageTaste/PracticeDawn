@@ -1,4 +1,5 @@
 add_executable(PracticeDawn
+    src/cam_ctrl.cpp
     src/main.cpp
     src/sdl_window.cpp
 )
