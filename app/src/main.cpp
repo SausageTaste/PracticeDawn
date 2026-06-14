@@ -76,7 +76,6 @@ int main(int argc, char* argv[]) {
     practice::WindowSDL3 window(1280, 720, "PracticeDawn");
     const auto surf_desc = ::create_surface_desc(window.get());
     wgpu_.create_surface(surf_desc, window.width(), window.height());
-
     wgpu_.create_render_pass(::find_assets_dir());
 
     while (true) {
