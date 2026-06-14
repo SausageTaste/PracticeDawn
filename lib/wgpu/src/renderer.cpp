@@ -2,6 +2,7 @@
 
 #include <array>
 #include <fstream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -9,49 +10,6 @@
 
 
 namespace {
-
-    constexpr std::array<practice::Mesh::Vertex, 24> kVertices{ {
-        // Front  (+Z) - red
-        { -0.5f, -0.5f, 0.5f, 1, 0, 0, 1 },
-        { 0.5f, -0.5f, 0.5f, 1, 0, 0, 1 },
-        { 0.5f, 0.5f, 0.5f, 1, 0, 0, 1 },
-        { -0.5f, 0.5f, 0.5f, 1, 0, 0, 1 },
-        // Back   (-Z) - green
-        { 0.5f, -0.5f, -0.5f, 0, 1, 0, 1 },
-        { -0.5f, -0.5f, -0.5f, 0, 1, 0, 1 },
-        { -0.5f, 0.5f, -0.5f, 0, 1, 0, 1 },
-        { 0.5f, 0.5f, -0.5f, 0, 1, 0, 1 },
-        // Right  (+X) - blue
-        { 0.5f, -0.5f, 0.5f, 0, 0, 1, 1 },
-        { 0.5f, -0.5f, -0.5f, 0, 0, 1, 1 },
-        { 0.5f, 0.5f, -0.5f, 0, 0, 1, 1 },
-        { 0.5f, 0.5f, 0.5f, 0, 0, 1, 1 },
-        // Left   (-X) - yellow
-        { -0.5f, -0.5f, -0.5f, 1, 1, 0, 1 },
-        { -0.5f, -0.5f, 0.5f, 1, 1, 0, 1 },
-        { -0.5f, 0.5f, 0.5f, 1, 1, 0, 1 },
-        { -0.5f, 0.5f, -0.5f, 1, 1, 0, 1 },
-        // Top    (+Y) - cyan
-        { -0.5f, 0.5f, 0.5f, 0, 1, 1, 1 },
-        { 0.5f, 0.5f, 0.5f, 0, 1, 1, 1 },
-        { 0.5f, 0.5f, -0.5f, 0, 1, 1, 1 },
-        { -0.5f, 0.5f, -0.5f, 0, 1, 1, 1 },
-        // Bottom (-Y) - magenta
-        { -0.5f, -0.5f, -0.5f, 1, 0, 1, 1 },
-        { 0.5f, -0.5f, -0.5f, 1, 0, 1, 1 },
-        { 0.5f, -0.5f, 0.5f, 1, 0, 1, 1 },
-        { -0.5f, -0.5f, 0.5f, 1, 0, 1, 1 },
-    } };
-
-    constexpr std::array<uint16_t, 36> kIndices{ {
-        0,  1,  2,  0,  2,  3,   // front
-        4,  5,  6,  4,  6,  7,   // back
-        8,  9,  10, 8,  10, 11,  // right
-        12, 13, 14, 12, 14, 15,  // left
-        16, 17, 18, 16, 18, 19,  // top
-        20, 21, 22, 20, 22, 23,  // bottom
-    } };
-
 
     wgpu::TextureView make_depth_view(
         const wgpu::Device& device, uint32_t w, uint32_t h
@@ -138,23 +96,32 @@ namespace practice {
 // Mesh
 namespace practice {
 
-    void Mesh::init(const wgpu::Queue& queue, const wgpu::Device& device) {
+    void Mesh::init(
+        const std::span<const Vertex> vertices,
+        const std::span<const uint16_t> indices,
+        const wgpu::Queue& queue,
+        const wgpu::Device& device
+    ) {
         // Geometry buffers
-        constexpr uint64_t kVbSize = kVertices.size() * sizeof(Vertex);
+        const uint64_t kVbSize = vertices.size() * sizeof(Vertex);
         const wgpu::BufferDescriptor vbDesc{
             .usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst,
             .size = kVbSize,
         };
         vtx_buf_ = device.CreateBuffer(&vbDesc);
-        queue.WriteBuffer(vtx_buf_, 0, kVertices.data(), kVbSize);
+        queue.WriteBuffer(vtx_buf_, 0, vertices.data(), kVbSize);
 
-        constexpr uint64_t kIbSize = kIndices.size() * sizeof(uint16_t);
+        const uint64_t kIbSize = indices.size() * sizeof(uint16_t);
+        if (indices.size() > std::numeric_limits<uint32_t>::max())
+            throw std::runtime_error("Mesh has too many indices");
+        index_count_ = static_cast<uint32_t>(indices.size());
+
         const wgpu::BufferDescriptor ibDesc{
             .usage = wgpu::BufferUsage::Index | wgpu::BufferUsage::CopyDst,
             .size = kIbSize,
         };
         idx_buf_ = device.CreateBuffer(&ibDesc);
-        queue.WriteBuffer(idx_buf_, 0, kIndices.data(), kIbSize);
+        queue.WriteBuffer(idx_buf_, 0, indices.data(), kIbSize);
     }
 
 }  // namespace practice
@@ -247,9 +214,6 @@ namespace practice {
         };
         const auto pipelineLayout = device.CreatePipelineLayout(&layoutDesc);
 
-        mesh_.init(queue_, device);
-        actor_.init(bindGroupLayout, device);
-
         // Render pipeline
         constexpr wgpu::TextureFormat kDepthFormat =
             wgpu::TextureFormat::Depth24Plus;
@@ -298,9 +262,7 @@ namespace practice {
         pipeline_ = device.CreateRenderPipeline(&pipelineDesc);
     }
 
-    void Renderer::tick(const glm::mat4& mvp) {
-        actor_.update_ubuf(mvp, queue_);
-
+    void Renderer::tick() {
         const auto colorView = surface_pkg_.acquire_color_view();
         const wgpu::RenderPassColorAttachment colorAttachment{
             .view = colorView,
@@ -324,10 +286,19 @@ namespace practice {
         {
             const auto pass = encoder.BeginRenderPass(&renderPassDesc);
             pass.SetPipeline(pipeline_);
-            pass.SetBindGroup(0, actor_.bind_group());
-            pass.SetVertexBuffer(0, mesh_.vtx_buf());
-            pass.SetIndexBuffer(mesh_.idx_buf(), wgpu::IndexFormat::Uint16);
-            pass.DrawIndexed(static_cast<uint32_t>(kIndices.size()));
+
+            for (const auto& meshActor : scene_.mesh_actors_) {
+                pass.SetVertexBuffer(0, meshActor->mesh_.vtx_buf());
+                pass.SetIndexBuffer(
+                    meshActor->mesh_.idx_buf(), wgpu::IndexFormat::Uint16
+                );
+
+                for (const auto& actor : meshActor->actors_) {
+                    pass.SetBindGroup(0, actor.bind_group());
+                    pass.DrawIndexed(meshActor->mesh_.index_count());
+                }
+            }
+
             pass.End();
         }
         const auto commands = encoder.Finish();
@@ -336,11 +307,44 @@ namespace practice {
         device_pkg_.process_events();
     }
 
+    void Renderer::tick(const glm::mat4& mvp) {
+        for (const auto& meshActor : scene_.mesh_actors_)
+            for (auto& actor : meshActor->actors_)
+                actor.update_ubuf(mvp, queue_);
+
+        tick();
+    }
+
     void Renderer::on_fbuf_resize(uint32_t new_width, uint32_t new_height) {
         surface_pkg_.on_fbuf_resize(new_width, new_height);
         depth_view_ = ::make_depth_view(
             device_pkg_.device_, surface_pkg_.width(), surface_pkg_.height()
         );
+    }
+
+    std::shared_ptr<Scene::MeshActor> Renderer::create_mesh(
+        std::span<const Mesh::Vertex> vertices,
+        std::span<const uint16_t> indices
+    ) {
+        auto meshActor = std::make_shared<Scene::MeshActor>();
+        meshActor->mesh_.init(vertices, indices, queue_, device_pkg_.device_);
+        scene_.mesh_actors_.push_back(meshActor);
+        return meshActor;
+    }
+
+    Actor& Renderer::add_actor(
+        Scene::MeshActor& meshActor, const glm::mat4& mvp
+    ) {
+        meshActor.actors_.emplace_back();
+        meshActor.actors_.back().init(
+            pipeline_.GetBindGroupLayout(0), device_pkg_.device_
+        );
+        meshActor.actors_.back().update_ubuf(mvp, queue_);
+        return meshActor.actors_.back();
+    }
+
+    void Renderer::update_actor(Actor& actor, const glm::mat4& mvp) {
+        actor.update_ubuf(mvp, queue_);
     }
 
 }  // namespace practice

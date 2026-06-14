@@ -1,6 +1,11 @@
 #pragma once
 
+#include <cstdint>
+#include <deque>
 #include <filesystem>
+#include <memory>
+#include <span>
+#include <vector>
 
 #include <glm/glm.hpp>
 
@@ -43,14 +48,21 @@ namespace practice {
         };
 
     public:
-        void init(const wgpu::Queue& queue, const wgpu::Device& device);
+        void init(
+            const std::span<const Vertex> vertices,
+            const std::span<const uint16_t> indices,
+            const wgpu::Queue& queue,
+            const wgpu::Device& device
+        );
 
         auto& vtx_buf() const { return vtx_buf_; }
         auto& idx_buf() const { return idx_buf_; }
+        auto index_count() const { return index_count_; }
 
     private:
         wgpu::Buffer vtx_buf_;
         wgpu::Buffer idx_buf_;
+        uint32_t index_count_ = 0;
     };
 
 
@@ -72,6 +84,18 @@ namespace practice {
     };
 
 
+    class Scene {
+
+    public:
+        struct MeshActor {
+            Mesh mesh_;
+            std::deque<Actor> actors_;
+        };
+
+        std::vector<std::shared_ptr<MeshActor>> mesh_actors_;
+    };
+
+
     class Renderer {
 
     public:
@@ -85,20 +109,28 @@ namespace practice {
 
         void create_render_pass(const std::filesystem::path& asset_dir);
 
+        void tick();
         void tick(const glm::mat4& mvp);
 
         void on_fbuf_resize(uint32_t new_width, uint32_t new_height);
 
+        std::shared_ptr<Scene::MeshActor> create_mesh(
+            std::span<const Mesh::Vertex> vertices,
+            std::span<const uint16_t> indices
+        );
+
+        Actor& add_actor(Scene::MeshActor& meshActor, const glm::mat4& mvp);
+        void update_actor(Actor& actor, const glm::mat4& mvp);
+
     private:
         DevicePackage device_pkg_;
         SurfacePackage surface_pkg_;
+        Scene scene_;
 
         wgpu::Queue queue_;
         wgpu::TextureView depth_view_;
 
         wgpu::RenderPipeline pipeline_;
-        Mesh mesh_;
-        Actor actor_;
     };
 
 }  // namespace practice

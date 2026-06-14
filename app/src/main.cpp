@@ -18,6 +18,49 @@
 
 namespace {
 
+    constexpr std::array<practice::Mesh::Vertex, 24> kVertices{ {
+        // Front  (+Z) - red
+        { -0.5f, -0.5f, 0.5f, 1, 0, 0, 1 },
+        { 0.5f, -0.5f, 0.5f, 1, 0, 0, 1 },
+        { 0.5f, 0.5f, 0.5f, 1, 0, 0, 1 },
+        { -0.5f, 0.5f, 0.5f, 1, 0, 0, 1 },
+        // Back   (-Z) - green
+        { 0.5f, -0.5f, -0.5f, 0, 1, 0, 1 },
+        { -0.5f, -0.5f, -0.5f, 0, 1, 0, 1 },
+        { -0.5f, 0.5f, -0.5f, 0, 1, 0, 1 },
+        { 0.5f, 0.5f, -0.5f, 0, 1, 0, 1 },
+        // Right  (+X) - blue
+        { 0.5f, -0.5f, 0.5f, 0, 0, 1, 1 },
+        { 0.5f, -0.5f, -0.5f, 0, 0, 1, 1 },
+        { 0.5f, 0.5f, -0.5f, 0, 0, 1, 1 },
+        { 0.5f, 0.5f, 0.5f, 0, 0, 1, 1 },
+        // Left   (-X) - yellow
+        { -0.5f, -0.5f, -0.5f, 1, 1, 0, 1 },
+        { -0.5f, -0.5f, 0.5f, 1, 1, 0, 1 },
+        { -0.5f, 0.5f, 0.5f, 1, 1, 0, 1 },
+        { -0.5f, 0.5f, -0.5f, 1, 1, 0, 1 },
+        // Top    (+Y) - cyan
+        { -0.5f, 0.5f, 0.5f, 0, 1, 1, 1 },
+        { 0.5f, 0.5f, 0.5f, 0, 1, 1, 1 },
+        { 0.5f, 0.5f, -0.5f, 0, 1, 1, 1 },
+        { -0.5f, 0.5f, -0.5f, 0, 1, 1, 1 },
+        // Bottom (-Y) - magenta
+        { -0.5f, -0.5f, -0.5f, 1, 0, 1, 1 },
+        { 0.5f, -0.5f, -0.5f, 1, 0, 1, 1 },
+        { 0.5f, -0.5f, 0.5f, 1, 0, 1, 1 },
+        { -0.5f, -0.5f, 0.5f, 1, 0, 1, 1 },
+    } };
+
+    constexpr std::array<uint16_t, 36> kIndices{ {
+        0,  1,  2,  0,  2,  3,   // front
+        4,  5,  6,  4,  6,  7,   // back
+        8,  9,  10, 8,  10, 11,  // right
+        12, 13, 14, 12, 14, 15,  // left
+        16, 17, 18, 16, 18, 19,  // top
+        20, 21, 22, 20, 22, 23,  // bottom
+    } };
+
+
     std::filesystem::path find_assets_dir() {
         std::filesystem::path path = std::filesystem::current_path();
         while (path.has_parent_path()) {
@@ -68,6 +111,8 @@ int main(int argc, char* argv[]) {
         wgpu_.create_surface(desc, window.width(), window.height());
     }
     wgpu_.create_render_pass(::find_assets_dir());
+    auto cube = wgpu_.create_mesh(kVertices, kIndices);
+    wgpu_.add_actor(*cube, glm::mat4(1.0f));
 
     while (true) {
         while (auto event = window.poll_event()) {
