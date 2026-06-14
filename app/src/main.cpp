@@ -4,9 +4,7 @@
 #include <fstream>
 #include <iostream>
 
-#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 
 #if defined(__APPLE__)
     #include <SDL3/SDL_metal.h>
