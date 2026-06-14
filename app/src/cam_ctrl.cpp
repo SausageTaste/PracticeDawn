@@ -1,7 +1,9 @@
 #include "cam_ctrl.hpp"
 
+#include <cmath>
 
-namespace practice {
+
+namespace {
 
     glm::dvec3 make_camera_forward(double yaw, double pitch) {
         const auto cos_pitch = std::cos(pitch);
@@ -13,6 +15,11 @@ namespace practice {
             )
         );
     }
+
+}  // namespace
+
+
+namespace practice {
 
     void set_key(CameraInput& input, SDL_Keycode key, bool down) {
         switch (key) {
@@ -46,9 +53,14 @@ namespace practice {
         const CameraInput& input,
         double dt
     ) {
-        const auto forward = make_camera_forward(input.yaw, input.pitch);
         const auto world_up = glm::dvec3(0, 1, 0);
-        const auto right = glm::normalize(glm::cross(forward, world_up));
+        camera_view.look_along(
+            make_camera_forward(input.yaw, input.pitch), world_up
+        );
+
+        const auto forward = camera_view.make_forward_dir();
+        const auto right = camera_view.make_right_dir();
+        const auto up = camera_view.make_up_dir();
 
         glm::dvec3 move(0);
         if (input.move_forward)
@@ -60,16 +72,14 @@ namespace practice {
         if (input.move_left)
             move -= right;
         if (input.move_up)
-            move += world_up;
+            move += up;
         if (input.move_down)
-            move -= world_up;
+            move -= up;
 
         if (glm::dot(move, move) > 0.0) {
             const auto speed = input.fast ? 8.0 : 3.0;
             camera_view.pos_ += glm::normalize(move) * speed * dt;
         }
-
-        camera_view.look_along(forward, world_up);
     }
 
 }  // namespace practice

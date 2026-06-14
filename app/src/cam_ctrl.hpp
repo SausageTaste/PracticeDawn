@@ -21,9 +21,6 @@ namespace practice {
         double pitch = 0.0;
     };
 
-
-    glm::dvec3 make_camera_forward(double yaw, double pitch);
-
     void set_key(CameraInput& input, SDL_Keycode key, bool down);
 
     void update_camera(
