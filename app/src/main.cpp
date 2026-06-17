@@ -5,10 +5,13 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 
 #include <glm/gtc/matrix_transform.hpp>
 
-#if defined(__APPLE__)
+#if defined(__EMSCRIPTEN__)
+    #include <emscripten/emscripten.h>
+#elif defined(__APPLE__)
     #include <SDL3/SDL_metal.h>
 #elif defined(_WIN32)
     #include <windows.h>
@@ -67,6 +70,9 @@ namespace {
 
 
     std::filesystem::path find_assets_dir() {
+#if defined(__EMSCRIPTEN__)
+        return "/assets";
+#else
         std::filesystem::path path = std::filesystem::current_path();
         while (path.has_parent_path()) {
             if (std::filesystem::exists(path / "assets"))
@@ -74,109 +80,167 @@ namespace {
             path = path.parent_path();
         }
         throw std::runtime_error("Failed to find assets directory!");
+#endif
     }
+
+    class App {
+
+    public:
+        void start_native() {
+            renderer_.init();
+            finish_init();
+        }
+
+        void start_web() {
+            renderer_.init_async([this]() {
+                finish_init();
+#if defined(__EMSCRIPTEN__)
+                emscripten_set_main_loop_arg(&App::web_frame, this, 0, true);
+#endif
+            });
+        }
+
+        bool tick_frame() {
+            const auto now = SDL_GetTicks();
+            const auto dt = (now - last_tick_) / 1000.0;
+            last_tick_ = now;
+
+            while (const auto* event = window_->poll_event()) {
+                if (event->type == SDL_EVENT_QUIT)
+                    return false;
+                if (event->type == SDL_EVENT_WINDOW_RESIZED) {
+                    renderer_.on_fbuf_resize(
+                        event->window.data1, event->window.data2
+                    );
+                }
+                if (event->type == SDL_EVENT_KEY_DOWN ||
+                    event->type == SDL_EVENT_KEY_UP) {
+                    if (event->key.key == SDLK_ESCAPE && event->key.down)
+                        return false;
+                    set_key(camera_input_, event->key.key, event->key.down);
+                }
+                if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                    event->button.button == SDL_BUTTON_RIGHT) {
+                    camera_input_.mouse_look = true;
+                    SDL_SetWindowRelativeMouseMode(window_->get(), true);
+                }
+                if (event->type == SDL_EVENT_MOUSE_BUTTON_UP &&
+                    event->button.button == SDL_BUTTON_RIGHT) {
+                    camera_input_.mouse_look = false;
+                    SDL_SetWindowRelativeMouseMode(window_->get(), false);
+                }
+                if (event->type == SDL_EVENT_MOUSE_MOTION &&
+                    camera_input_.mouse_look) {
+                    constexpr double kMouseSensitivity = 0.0025;
+                    constexpr double kPitchLimit = kPi * 0.49;
+                    camera_input_.yaw += event->motion.xrel * kMouseSensitivity;
+                    camera_input_.pitch = std::clamp(
+                        camera_input_.pitch -
+                            event->motion.yrel * kMouseSensitivity,
+                        -kPitchLimit,
+                        kPitchLimit
+                    );
+                }
+            }
+
+            auto& camera_view = renderer_.scene().camera_view_;
+            practice::update_camera(camera_view, camera_input_, dt);
+
+            left_cube_->tform_.rotate(dt, glm::dvec3(0, 1, 0));
+            right_cube_->tform_.rotate(dt, glm::dvec3(1, 1, 0));
+
+            renderer_.tick();
+            return true;
+        }
+
+    private:
+        void finish_init() {
+            window_ = std::make_unique<practice::WindowSDL3>(
+                1280, 720, "PracticeDawn"
+            );
+            create_surface();
+
+            renderer_.create_render_pass(::find_assets_dir());
+            cube_mesh_ = renderer_.create_mesh(kVertices, kIndices);
+            left_cube_ = &renderer_.add_actor(*cube_mesh_, glm::mat4(1.0f));
+            right_cube_ = &renderer_.add_actor(*cube_mesh_, glm::mat4(1.0f));
+
+            left_cube_->tform_.set_pos(-0.9, 0, 0);
+            right_cube_->tform_.set_pos(0.9, 0, 0);
+
+            auto& camera_view = renderer_.scene().camera_view_;
+            camera_view.set_pos(0, 0, 4);
+            practice::update_camera(camera_view, camera_input_, 0.0);
+
+            last_tick_ = SDL_GetTicks();
+        }
+
+        void create_surface() {
+#if defined(__EMSCRIPTEN__)
+            wgpu::EmscriptenSurfaceSourceCanvasHTMLSelector src{};
+            src.selector = "#canvas";
+            wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
+#elif defined(__APPLE__)
+            SDL_MetalView view = SDL_Metal_CreateView(window_->get());
+            wgpu::SurfaceSourceMetalLayer src{};
+            src.layer = SDL_Metal_GetLayer(view);
+            wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
+#elif defined(_WIN32)
+            wgpu::SurfaceSourceWindowsHWND src{};
+            src.hinstance = GetModuleHandle(nullptr);
+            src.hwnd = SDL_GetPointerProperty(
+                SDL_GetWindowProperties(window_->get()),
+                SDL_PROP_WINDOW_WIN32_HWND_POINTER,
+                nullptr
+            );
+            wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
+#else
+            wgpu::SurfaceSourceXlibWindow src{};
+            src.display = SDL_GetPointerProperty(
+                SDL_GetWindowProperties(window_->get()),
+                SDL_PROP_WINDOW_X11_DISPLAY_POINTER,
+                nullptr
+            );
+            src.window = static_cast<uint64_t>(SDL_GetNumberProperty(
+                SDL_GetWindowProperties(window_->get()),
+                SDL_PROP_WINDOW_X11_WINDOW_NUMBER,
+                0
+            ));
+            wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
+#endif
+            renderer_.create_surface(desc, window_->width(), window_->height());
+        }
+
+#if defined(__EMSCRIPTEN__)
+        static void web_frame(void* user_data) {
+            auto* app = static_cast<App*>(user_data);
+            if (!app->tick_frame())
+                emscripten_cancel_main_loop();
+        }
+#endif
+
+        practice::Renderer renderer_;
+        std::unique_ptr<practice::WindowSDL3> window_;
+        std::shared_ptr<practice::Scene::MeshActor> cube_mesh_;
+        practice::Actor* left_cube_ = nullptr;
+        practice::Actor* right_cube_ = nullptr;
+        practice::CameraInput camera_input_;
+        uint64_t last_tick_ = 0;
+    };
 
 }  // namespace
 
 
 int main(int argc, char* argv[]) {
-    practice::Renderer wgpu_;
-    wgpu_.init();
-
-    practice::WindowSDL3 window(1280, 720, "PracticeDawn");
-    {
-#if defined(__APPLE__)
-        SDL_MetalView view = SDL_Metal_CreateView(window.get());
-        wgpu::SurfaceSourceMetalLayer src{};
-        src.layer = SDL_Metal_GetLayer(view);
-        wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
-#elif defined(_WIN32)
-        wgpu::SurfaceSourceWindowsHWND src{};
-        src.hinstance = GetModuleHandle(nullptr);
-        src.hwnd = SDL_GetPointerProperty(
-            SDL_GetWindowProperties(window.get()),
-            SDL_PROP_WINDOW_WIN32_HWND_POINTER,
-            nullptr
-        );
-        wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
-#else
-        wgpu::SurfaceSourceXlibWindow src{};
-        src.display = SDL_GetPointerProperty(
-            SDL_GetWindowProperties(window.get()),
-            SDL_PROP_WINDOW_X11_DISPLAY_POINTER,
-            nullptr
-        );
-        src.window = static_cast<uint64_t>(SDL_GetNumberProperty(
-            SDL_GetWindowProperties(window.get()),
-            SDL_PROP_WINDOW_X11_WINDOW_NUMBER,
-            0
-        ));
-        wgpu::SurfaceDescriptor desc{ .nextInChain = &src };
-#endif
-        wgpu_.create_surface(desc, window.width(), window.height());
-    }
-    wgpu_.create_render_pass(::find_assets_dir());
-    auto cube_mesh = wgpu_.create_mesh(kVertices, kIndices);
-    auto& left_cube = wgpu_.add_actor(*cube_mesh, glm::mat4(1.0f));
-    auto& right_cube = wgpu_.add_actor(*cube_mesh, glm::mat4(1.0f));
-
-    left_cube.tform_.set_pos(-0.9, 0, 0);
-    right_cube.tform_.set_pos(0.9, 0, 0);
-
-    auto& scene = wgpu_.scene();
-    auto& camera_view = scene.camera_view_;
-    camera_view.set_pos(0, 0, 4);
-    practice::CameraInput camera_input;
-    practice::update_camera(camera_view, camera_input, 0.0);
-
-    auto last_tick = SDL_GetTicks();
-
-    while (true) {
-        const auto dt = (SDL_GetTicks() - last_tick) / 1000.0;
-        last_tick = SDL_GetTicks();
-
-        while (auto event = window.poll_event()) {
-            if (event->type == SDL_EVENT_QUIT)
-                return EXIT_SUCCESS;
-            if (event->type == SDL_EVENT_WINDOW_RESIZED) {
-                wgpu_.on_fbuf_resize(event->window.data1, event->window.data2);
-            }
-            if (event->type == SDL_EVENT_KEY_DOWN ||
-                event->type == SDL_EVENT_KEY_UP) {
-                if (event->key.key == SDLK_ESCAPE && event->key.down)
-                    return EXIT_SUCCESS;
-                set_key(camera_input, event->key.key, event->key.down);
-            }
-            if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
-                event->button.button == SDL_BUTTON_RIGHT) {
-                camera_input.mouse_look = true;
-                SDL_SetWindowRelativeMouseMode(window.get(), true);
-            }
-            if (event->type == SDL_EVENT_MOUSE_BUTTON_UP &&
-                event->button.button == SDL_BUTTON_RIGHT) {
-                camera_input.mouse_look = false;
-                SDL_SetWindowRelativeMouseMode(window.get(), false);
-            }
-            if (event->type == SDL_EVENT_MOUSE_MOTION &&
-                camera_input.mouse_look) {
-                constexpr double kMouseSensitivity = 0.0025;
-                constexpr double kPitchLimit = kPi * 0.49;
-                camera_input.yaw += event->motion.xrel * kMouseSensitivity;
-                camera_input.pitch = std::clamp(
-                    camera_input.pitch - event->motion.yrel * kMouseSensitivity,
-                    -kPitchLimit,
-                    kPitchLimit
-                );
-            }
-        }
-
-        practice::update_camera(camera_view, camera_input, dt);
-
-        left_cube.tform_.rotate(dt, glm::dvec3(0, 1, 0));
-        right_cube.tform_.rotate(dt, glm::dvec3(1, 1, 0));
-
-        wgpu_.tick();
-    }
-
+#if defined(__EMSCRIPTEN__)
+    auto* app = new App();
+    app->start_web();
     return EXIT_SUCCESS;
+#else
+    App app;
+    app.start_native();
+    while (app.tick_frame()) {
+    }
+    return EXIT_SUCCESS;
+#endif
 }

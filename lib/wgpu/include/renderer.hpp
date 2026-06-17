@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <deque>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <span>
 #include <vector>
@@ -104,6 +105,7 @@ namespace practice {
 
     public:
         void init();
+        void init_async(std::function<void()> on_ready);
 
         void create_surface(
             const wgpu::SurfaceDescriptor& descriptor,

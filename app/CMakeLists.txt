@@ -23,3 +23,12 @@ if (WIN32)
         VERBATIM
     )
 endif()
+
+if (EMSCRIPTEN)
+    set_target_properties(PracticeDawn PROPERTIES SUFFIX ".html")
+    target_link_options(PracticeDawn PRIVATE
+        "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/assets@/assets"
+        "SHELL:-sALLOW_MEMORY_GROWTH=1"
+        "SHELL:-sEXIT_RUNTIME=0"
+    )
+endif()

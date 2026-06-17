@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include <webgpu/webgpu_cpp.h>
 
 
@@ -9,6 +11,7 @@ namespace practice {
 
     public:
         void init();
+        void init_async(std::function<void()> on_ready);
 
         wgpu::CommandEncoder create_cmd_encoder() const {
             return device_.CreateCommandEncoder();

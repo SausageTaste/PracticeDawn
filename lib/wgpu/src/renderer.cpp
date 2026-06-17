@@ -166,6 +166,10 @@ namespace practice {
 
     void Renderer::init() { device_pkg_.init(); }
 
+    void Renderer::init_async(std::function<void()> on_ready) {
+        device_pkg_.init_async(std::move(on_ready));
+    }
+
     void Renderer::create_surface(
         const wgpu::SurfaceDescriptor& descriptor,
         uint32_t width,
