@@ -11,6 +11,7 @@
 
 #if defined(__EMSCRIPTEN__)
     #include <emscripten/emscripten.h>
+    #include <emscripten/html5.h>
 #elif defined(__APPLE__)
     #include <SDL3/SDL_metal.h>
 #elif defined(_WIN32)
@@ -95,16 +96,34 @@ namespace {
             renderer_.init_async([this]() {
                 finish_init();
 #if defined(__EMSCRIPTEN__)
-                emscripten_set_main_loop_arg(&App::web_frame, this, 0, true);
+                emscripten_request_animation_frame_loop(&App::web_frame, this);
 #endif
             });
         }
 
-        bool tick_frame() {
+        bool tick_frame(double dt) {
+            if (!poll_events())
+                return false;
+
+            auto& camera_view = renderer_.scene().camera_view_;
+            practice::update_camera(camera_view, camera_input_, dt);
+
+            left_cube_->tform_.rotate(dt, glm::dvec3(0, 1, 0));
+            right_cube_->tform_.rotate(dt, glm::dvec3(1, 1, 0));
+
+            renderer_.tick();
+            return true;
+        }
+
+        bool tick_frame_from_clock() {
             const auto now = SDL_GetTicks();
             const auto dt = (now - last_tick_) / 1000.0;
             last_tick_ = now;
+            return tick_frame(dt);
+        }
 
+    private:
+        bool poll_events() {
             while (const auto* event = window_->poll_event()) {
                 if (event->type == SDL_EVENT_QUIT)
                     return false;
@@ -142,18 +161,9 @@ namespace {
                     );
                 }
             }
-
-            auto& camera_view = renderer_.scene().camera_view_;
-            practice::update_camera(camera_view, camera_input_, dt);
-
-            left_cube_->tform_.rotate(dt, glm::dvec3(0, 1, 0));
-            right_cube_->tform_.rotate(dt, glm::dvec3(1, 1, 0));
-
-            renderer_.tick();
             return true;
         }
 
-    private:
         void finish_init() {
             window_ = std::make_unique<practice::WindowSDL3>(
                 1280, 720, "PracticeDawn"
@@ -212,10 +222,13 @@ namespace {
         }
 
 #if defined(__EMSCRIPTEN__)
-        static void web_frame(void* user_data) {
+        static EM_BOOL web_frame(double time, void* user_data) {
             auto* app = static_cast<App*>(user_data);
-            if (!app->tick_frame())
-                emscripten_cancel_main_loop();
+            if (app->last_frame_time_ == 0.0)
+                app->last_frame_time_ = time;
+            const auto dt = (time - app->last_frame_time_) / 1000.0;
+            app->last_frame_time_ = time;
+            return app->tick_frame(dt) ? EM_TRUE : EM_FALSE;
         }
 #endif
 
@@ -226,6 +239,7 @@ namespace {
         practice::Actor* right_cube_ = nullptr;
         practice::CameraInput camera_input_;
         uint64_t last_tick_ = 0;
+        double last_frame_time_ = 0.0;
     };
 
 }  // namespace
@@ -239,7 +253,7 @@ int main(int argc, char* argv[]) {
 #else
     App app;
     app.start_native();
-    while (app.tick_frame()) {
+    while (app.tick_frame_from_clock()) {
     }
     return EXIT_SUCCESS;
 #endif

@@ -56,7 +56,11 @@ namespace practice {
         surface_.Configure(&config_);
     }
 
-    void SurfacePackage::present() const { surface_.Present(); }
+    void SurfacePackage::present() const {
+#if !defined(__EMSCRIPTEN__)
+        surface_.Present();
+#endif
+    }
 
     void SurfacePackage::on_fbuf_resize(
         uint32_t new_width, uint32_t new_height
